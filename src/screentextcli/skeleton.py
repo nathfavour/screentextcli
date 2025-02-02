@@ -107,17 +107,18 @@ def parse_args(args):
         "-vv", "--very-verbose", dest="loglevel",
         help="set loglevel to DEBUG", action="store_const", const=logging.DEBUG,
     )
-    subparsers = parser.add_subparsers(dest="command", required=True, help="subcommands")
-    # 'start' subcommand for monitoring directories
+    subparsers = parser.add_subparsers(dest="command", help="subcommands")  # removed required=True
     start_parser = subparsers.add_parser("start", help="start monitoring directories")
     start_parser.add_argument(
         "--dirs",
         nargs="+",
         help="Directories to monitor (overrides configuration)"
     )
-    # 'config' subcommand for displaying current configuration
     subparsers.add_parser("config", help="display current configuration")
-    return parser.parse_args(args)
+    parsed = parser.parse_args(args)
+    if parsed.command is None:
+        parsed.command = "start"  # default to start if no subcommand is provided
+    return parsed
 
 def setup_logging(loglevel):
     """Setup basic logging."""
@@ -131,10 +132,12 @@ def main(cli_args):
     loglevel = args.loglevel or logging.WARNING
     setup_logging(loglevel)
     config = load_config()
-    # Dispatch based on subcommand
+    # Dispatch to the appropriate command handler
     if args.command == "start":
+        from screentextcli.cli import commands  # local import if needed
         commands.start(args, config)
     elif args.command == "config":
+        from screentextcli.cli import commands  # local import if needed
         commands.config(args, config)
 
 def run():
