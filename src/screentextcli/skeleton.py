@@ -59,6 +59,14 @@ def watch_dirs(dirs, scan_interval=5):
     """Continuously scan given directories for new image files and process them."""
     processed = set()
     image_exts = (".png", ".jpg", ".jpeg", ".bmp", ".tiff")
+    
+    # Pre-scan: mark all existing images as processed
+    for d in dirs:
+        for root, _, files in os.walk(d):
+            for file in files:
+                if file.lower().endswith(image_exts):
+                    processed.add(os.path.join(root, file))
+    
     _logger.info("Monitoring directories: " + ", ".join(dirs))
     try:
         while True:
