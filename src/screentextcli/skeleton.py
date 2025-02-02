@@ -1,28 +1,18 @@
 """
-This is a skeleton file that can serve as a starting point for a Python
-console script. To run this script uncomment the following lines in the
-``[options.entry_points]`` section in ``setup.cfg``::
+screentextz - A CLI tool that continuously scans directories for new image files,
+extracts text using Tesseract CLI, and copies the text to the system clipboard.
 
-    console_scripts =
-         fibonacci = screentextcli.skeleton:run
-
-Then run ``pip install .`` (or ``pip install -e .`` for editable mode)
-which will install the command ``fibonacci`` inside your current environment.
-
-Besides console scripts, the header (i.e. until ``_logger``...) of this file can
-also be used as template for Python modules.
-
-Note:
-    This file can be renamed depending on your needs or safely removed if not needed.
-
-References:
-    - https://setuptools.pypa.io/en/latest/userguide/entry_point.html
-    - https://pip.pypa.io/en/stable/reference/pip_install
+To install:
+    Uncomment the relevant lines in setup.cfg,
+    then run “pip install .” or “pip install -e .”
 """
 
 import argparse
 import logging
 import sys
+import os
+import time
+import subprocess
 
 from screentextcli import __version__
 
@@ -32,53 +22,67 @@ __license__ = "MIT"
 
 _logger = logging.getLogger(__name__)
 
+# ---- Functions for directory scanning and clipboard management ----
+def copy_to_clipboard(text):
+    """Copy text to the system clipboard using available CLI tools."""
+    if sys.platform == "win32":
+        subprocess.run("clip", input=text, text=True, shell=True)
+    elif sys.platform == "darwin":
+        subprocess.run("pbcopy", input=text, text=True)
+    else:
+        # Assumes Linux with xclip installed
+        subprocess.run(["xclip", "-selection", "clipboard"], input=text, text=True)
 
-# ---- Python API ----
-# The functions defined in this section can be imported by users in their
-# Python scripts/interactive interpreter, e.g. via
-# `from screentextcli.skeleton import fib`,
-# when using this Python module as a library.
-
-
-def fib(n):
-    """Fibonacci example function
-
-    Args:
-      n (int): integer
-
-    Returns:
-      int: n-th Fibonacci number
-    """
-    assert n > 0
-    a, b = 1, 1
-    for _i in range(n - 1):
-        a, b = b, a + b
-    return a
-
+def watch_dirs(dirs):
+    """Continuously scan given directories for new image files and process them."""
+    processed = set()
+    image_exts = (".png", ".jpg", ".jpeg", ".bmp", ".tiff")
+    _logger.info("Monitoring directories: " + ", ".join(dirs))
+    try:
+        while True:
+            for d in dirs:
+                for root, _, files in os.walk(d):
+                    for file in files:
+                        if file.lower().endswith(image_exts):
+                            full_path = os.path.join(root, file)
+                            if full_path in processed:
+                                continue
+                            _logger.info(f"Processing new image: {full_path}")
+                            try:
+                                # Call Tesseract CLI: assumes tesseract is installed and in PATH
+                                result = subprocess.run(
+                                    ["tesseract", full_path, "stdout"], capture_output=True, text=True
+                                )
+                                text = result.stdout.strip()
+                                if text:
+                                    copy_to_clipboard(text)
+                                    _logger.info("Extracted text copied to clipboard.")
+                                else:
+                                    _logger.warning("No text extracted from image.")
+                            except Exception as e:
+                                _logger.error(f"Error processing {full_path}: {e}")
+                            processed.add(full_path)
+            time.sleep(5)
+    except KeyboardInterrupt:
+        _logger.info("Stopping directory monitoring.")
 
 # ---- CLI ----
-# The functions defined in this section are wrappers around the main Python
-# API allowing them to be called directly from the terminal as a CLI
-# executable/script.
-
-
 def parse_args(args):
-    """Parse command line parameters
-
-    Args:
-      args (List[str]): command line parameters as list of strings
-          (for example  ``["--help"]``).
-
-    Returns:
-      :obj:`argparse.Namespace`: command line parameters namespace
-    """
-    parser = argparse.ArgumentParser(description="Just a Fibonacci demonstration")
+    """Parse command line parameters."""
+    parser = argparse.ArgumentParser(
+        description="screentextz - continuously scan directories for new images, extract text using Tesseract, and copy it to the clipboard."
+    )
     parser.add_argument(
         "--version",
         action="version",
         version=f"screentextcli {__version__}",
     )
-    parser.add_argument(dest="n", help="n-th Fibonacci number", type=int, metavar="INT")
+    parser.add_argument(
+        "--dirs",
+        nargs="+",
+        default=[os.path.expanduser("~/Pictures/Screenshots")],
+        help="Directories to monitor for new images (default: ~/Pictures/Screenshots)"
+    )
     parser.add_argument(
         "-v",
         "--verbose",
@@ -97,53 +101,21 @@ def parse_args(args):
     )
     return parser.parse_args(args)
 
-
 def setup_logging(loglevel):
-    """Setup basic logging
-
-    Args:
-      loglevel (int): minimum loglevel for emitting messages
-    """
+    """Setup basic logging."""
     logformat = "[%(asctime)s] %(levelname)s:%(name)s:%(message)s"
-    logging.basicConfig(
-        level=loglevel, stream=sys.stdout, format=logformat, datefmt="%Y-%m-%d %H:%M:%S"
-    )
-
+    logging.basicConfig(level=loglevel, stream=sys.stdout, format=logformat, datefmt="%Y-%m-%d %H:%M:%S")
 
 def main(args):
-    """Wrapper allowing :func:`fib` to be called with string arguments in a CLI fashion
-
-    Instead of returning the value from :func:`fib`, it prints the result to the
-    ``stdout`` in a nicely formatted message.
-
-    Args:
-      args (List[str]): command line parameters as list of strings
-          (for example  ``["--verbose", "42"]``).
-    """
+    """Main entry point for screentextz CLI."""
     args = parse_args(args)
-    setup_logging(args.loglevel)
-    _logger.debug("Starting crazy calculations...")
-    print(f"The {args.n}-th Fibonacci number is {fib(args.n)}")
-    _logger.info("Script ends here")
-
+    loglevel = args.loglevel or logging.WARNING
+    setup_logging(loglevel)
+    watch_dirs(args.dirs)
 
 def run():
-    """Calls :func:`main` passing the CLI arguments extracted from :obj:`sys.argv`
-
-    This function can be used as entry point to create console scripts with setuptools.
-    """
+    """Execute main passing command line arguments."""
     main(sys.argv[1:])
 
-
 if __name__ == "__main__":
-    # ^  This is a guard statement that will prevent the following code from
-    #    being executed in the case someone imports this file instead of
-    #    executing it as a script.
-    #    https://docs.python.org/3/library/__main__.html
-
-    # After installing your project with pip, users can also run your Python
-    # modules as scripts via the ``-m`` flag, as defined in PEP 338::
-    #
-    #     python -m screentextcli.skeleton 42
-    #
     run()
