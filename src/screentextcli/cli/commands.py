@@ -1,11 +1,12 @@
 import os
-from screentextcli.skeleton import watch_dirs  # reuse scanning function
 
 def start(args, config):
     """
     Start monitoring directories.
     Uses --dirs from CLI if provided; otherwise falls back to config file.
     """
+    # Import watch_dirs here to avoid circular dependency
+    from screentextcli.skeleton import watch_dirs
     dirs = args.dirs if args.dirs is not None else config["dirs"]
     scan_interval = config.get("scan_interval", 5)
     watch_dirs(dirs, scan_interval)
